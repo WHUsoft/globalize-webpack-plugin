@@ -322,6 +322,7 @@ class ProductionModePlugin {
             // chunk.removeModule doesn't always find the module to remove
             // ¯\_(ツ)_/¯, so we have to be be a bit more thorough here.
             chunk.forEachModule((module) => module.removeChunk(chunk));
+            chunk.modules = [];
 
             // install the rewritten modules
             chunk.setModules(newModules);
@@ -343,9 +344,8 @@ class ProductionModePlugin {
         }
         function chunkScore(chunk) {
           if (!cachedChunkScore[chunk.name]) {
-            cachedChunkScore[chunk.name] = chunk.getModules().reduce((sum, module) => {
-              return Math.max(sum, moduleScore(module));
-            }, -1);
+            cachedChunkScore[chunk.name] = chunk.mapModules((module) => { return moduleScore(module); })
+                                                .reduce((max, score) => { return Math.max(max, score); }, -1);
           }
           return cachedChunkScore[chunk.name];
         }
