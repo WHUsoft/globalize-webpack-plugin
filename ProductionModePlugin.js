@@ -254,7 +254,7 @@ class ProductionModePlugin {
         const globalizeModuleIdsMap = {};
 
         compilation.chunks.forEach((chunk) => {
-          chunk.modules.forEach((module) => {
+          chunk.forEachModule((module) => {
             let aux;
             const request = module.request;
             if (request && util.isGlobalizeRuntimeModule(request)) {
@@ -295,7 +295,7 @@ class ProductionModePlugin {
             chunk.removeModule(chunk.entryModule);
             chunk.entryModule = chunk.modules.find((module) => module.context.endsWith(".tmp-globalize-webpack"));
 
-            const newModules = chunk.modules.map((module) => {
+            const newModules = chunk.mapModules((module) => {
               let fnContent;
               if (module === chunk.entryModule) {
                 // rewrite entry module to contain the globalize-compiled-data
@@ -325,7 +325,7 @@ class ProductionModePlugin {
             // remove old modules with modified clones
             // chunk.removeModule doesn't always find the module to remove
             // ¯\_(ツ)_/¯, so we have to be be a bit more thorough here.
-            chunk.modules.forEach((module) => module.removeChunk(chunk));
+            chunk.forEachModule((module) => module.removeChunk(chunk));
             chunk.modules = [];
 
             // install the rewritten modules
@@ -348,9 +348,8 @@ class ProductionModePlugin {
         }
         function chunkScore(chunk) {
           if (!cachedChunkScore[chunk.name]) {
-            cachedChunkScore[chunk.name] = chunk.modules.reduce((sum, module) => {
-              return Math.max(sum, moduleScore(module));
-            }, -1);
+            cachedChunkScore[chunk.name] = chunk.mapModules((module) => { return moduleScore(module); })
+                                                .reduce((max, score) => { return Math.max(max, score); }, -1);
           }
           return cachedChunkScore[chunk.name];
         }
