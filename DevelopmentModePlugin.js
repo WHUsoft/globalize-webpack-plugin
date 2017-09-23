@@ -1,6 +1,7 @@
 "use strict";
 
 const CommonJsRequireDependency = require("webpack/lib/dependencies/CommonJsRequireDependency");
+const HarmonyImportDependency = require("webpack/lib/dependencies/HarmonyImportDependency");
 const fs = require("fs");
 const path = require("path");
 const SkipAMDPlugin = require("skip-amd-webpack-plugin");
@@ -47,6 +48,22 @@ class DevelopmentModePlugin {
     // Globalize object.
     compiler.plugin("compilation", (compilation, params) => {
       params.normalModuleFactory.plugin("parser", (parser) => {
+        parser.plugin("import specifier", (statement, source, id, name) => {
+          const request = parser.state.current.request;
+          if (
+            typeof statement.source === 'object' 
+            && typeof statement.source.value === 'string'
+            && statement.source.value === 'globalize'
+            && this.moduleFilter(request)
+            // && !(new RegExp(util.escapeRegex(this.i18nData))).test(request)
+          ) {
+            const dep = new HarmonyImportDependency(this.i18nData, name, [0, statement.source.range[1]-statement.source.range[0]]);
+            parser.state.current.addDependency(dep);
+  
+            return true;
+          }
+        });
+
         parser.plugin("call require:commonjs:item", (expr, param) => {
           const request = parser.state.current.request;
 

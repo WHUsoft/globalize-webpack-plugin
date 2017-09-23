@@ -2,6 +2,7 @@
 
 const CommonJsRequireDependency = require("webpack/lib/dependencies/CommonJsRequireDependency");
 const GlobalizeCompilerHelper = require("./GlobalizeCompilerHelper");
+const HarmonyImportDependency = require("webpack/lib/dependencies/HarmonyImportDependency");
 const MultiEntryPlugin = require("webpack/lib/MultiEntryPlugin");
 const NormalModuleReplacementPlugin = require("webpack/lib/NormalModuleReplacementPlugin");
 const PatchedRawModule = require("./PatchedRawModule");
@@ -58,6 +59,57 @@ class ProductionModePlugin {
       // Map each AST and its request filepath.
       parser.plugin("program", (ast) => {
         globalizeCompilerHelper.setAst(parser.state.current.request, ast);
+      });
+
+      // "Intercepts" all `import .. from "globalize"` by transforming them into a
+      // `import` to our custom precompiled formatters/parsers, which in turn
+      // requires Globalize, set the default locale and then exports the
+      // Globalize object.
+      parser.plugin("import specifier", (statement, source, id, name) => {
+        const request = parser.state.current.request;
+        if (
+          typeof statement.source === 'object' 
+          && typeof statement.source.value === 'string'
+          && statement.source.value === 'globalize'
+          && this.moduleFilter(request) 
+          && !(globalizeCompilerHelper.isCompiledDataModule(request))
+        ) {
+          // Extract Globalize formatters and parsers for all the locales. Webpack
+          // allocates distinct moduleIds per locale, enabling multiple locales to
+          // be used at the same time.
+          this.supportedLocales.forEach((locale) => {
+            // Statically extract Globalize formatters and parsers from the request
+            // file only. Then, create a custom precompiled formatters/parsers module
+            // that will be called instead of Globalize, which in turn requires
+            // Globalize, set the default locale and then exports the Globalize
+            // object.
+            const compiledDataFilepath = globalizeCompilerHelper.createCompiledDataModule(request, locale);
+
+            // Skip the AMD part of the custom precompiled formatters/parsers UMD
+            // wrapper.
+            //
+            // Note: We're hacking an already created SkipAMDPlugin instance instead
+            // of using a regular code like the below in order to take advantage of
+            // its position in the plugins list. Otherwise, it'd be too late to plugin
+            // and AMD would no longer be skipped at this point.
+            //
+            // compiler.apply(new SkipAMDPlugin(new RegExp(compiledDataFilepath));
+            //
+            // 1: Removes the leading and the trailing `/` from the regexp string.
+            globalizeSkipAMDPlugin.requestRegExp = new RegExp([
+              globalizeSkipAMDPlugin.requestRegExp.toString().slice(1, -1)/* 1 */,
+              util.escapeRegex(compiledDataFilepath)
+            ].join("|"));
+
+            // Add localized Globalize formatters and parsers as dependencies
+            // Replace import .. "globalize" with:
+            // import .. "<custom precompiled module of developmentLocale>".
+            const dep = new HarmonyImportDependency(compiledDataFilepath, name, [0, statement.source.range[1]-statement.source.range[0]]);
+            parser.state.current.addDependency(dep);
+          });
+
+          return true;
+        }
       });
 
       // "Intercepts" all `require("globalize")` by transforming them into a
