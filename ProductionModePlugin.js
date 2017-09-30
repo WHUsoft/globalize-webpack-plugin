@@ -201,7 +201,8 @@ class ProductionModePlugin {
           }
         });
         for (let [locale, chunk] of compiledDataChunks.entries()) {
-          chunk.filenameTemplate = output.replace("[locale]", locale).replace("[hash]", chunk.id);
+          chunk.filenameTemplate = output.replace("[locale]", locale);
+          if (chunk.id) chunk.filenameTemplate = chunk.filenameTemplate.replace("[chunkhash]", chunk.id);
         }
         if(!hasAnyModuleBeenIncluded) {
           console.warn("No Globalize compiled data module found");
